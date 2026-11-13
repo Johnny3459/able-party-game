@@ -1,0 +1,260 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>200인용 통합 파티게임 전광판</title>
+  <style>
+    body { font-family: 'Pretendard', sans-serif; background: #090d16; color: white; text-align: center; margin: 0; padding: 12px; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .nav-group { background: #1e293b; padding: 10px; border-radius: 12px; margin-bottom: 12px; }
+    .nav-row { display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; margin: 5px 0; }
+    button { padding: 8px 12px; font-size: 13px; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; background: #3b82f6; color: white; }
+    button:hover { opacity: 0.85; }
+    .c-quiz { background: #2563eb; }
+    .c-speed { background: #059669; }
+    .c-mind { background: #7c3aed; }
+    .c-event { background: #db2777; }
+    .c-rank { background: #f59e0b; color: #000; font-size: 14px; }
+    .board { background: #1e293b; padding: 25px; border-radius: 16px; min-height: 460px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+    .badge { display: inline-block; background: #334155; padding: 6px 14px; margin: 4px; border-radius: 16px; font-size: 16px; }
+    .mem-grid { display: grid; grid-template-columns: repeat(3, 100px); gap: 10px; justify-content: center; margin: 20px auto; }
+    .mem-cell { width: 100px; height: 100px; background: #334155; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 40px; font-weight: 900; color: #38bdf8; }
+    .big-text { font-size: 54px; font-weight: 900; color: #fbbf24; margin: 20px 0; }
+    .rank-row { display: flex; justify-content: space-between; background: #334155; padding: 12px 24px; margin: 8px auto; max-width: 700px; border-radius: 8px; font-size: 22px; font-weight: bold; }
+    .clue-box { background: #334155; padding: 10px; margin: 6px auto; max-width: 700px; border-radius: 8px; font-size: 18px; text-align: left; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="nav-group">
+      <div class="nav-row">
+        <button onclick="setPhase('LOBBY')">🏠 대기실(QR)</button>
+        <button class="c-quiz" onclick="setPhase('MEMORY')">1.메모리</button>
+        <button class="c-quiz" onclick="setPhase('CUSTOM_COLLECT')">2-1.12문제출제</button>
+        <button class="c-quiz" onclick="setPhase('CUSTOM_SOLVE')">2-2.12문제풀이</button>
+        <button class="c-quiz" onclick="setPhase('WORDCHAIN')">3.끝말잇기</button>
+        <button class="c-quiz" onclick="setPhase('MATH')">4.구구단</button>
+        <button class="c-quiz" onclick="setPhase('NONSENSE')">5.아재넌센스</button>
+        <button class="c-quiz" onclick="setPhase('CHOSUNG')">6.초성퀴즈</button>
+        <button class="c-quiz" onclick="setPhase('IDIOM')">7.사자성어</button>
+        <button class="c-quiz" onclick="setPhase('CAPITAL')">8.수도퀴즈</button>
+        <button class="c-quiz" onclick="setPhase('TWENTY')">9.스무고개</button>
+        <button class="c-quiz" onclick="setPhase('SONG')">10.가사퀴즈</button>
+      </div>
+      <div class="nav-row">
+        <button class="c-speed" onclick="setPhase('CLICKER')">11.광클10초</button>
+        <button class="c-speed" onclick="setPhase('STOPWATCH')">12.7.77초정지</button>
+        <button class="c-speed" onclick="setPhase('REFLEX')">13.청기백기</button>
+        <button class="c-speed" onclick="setPhase('NUM15')">14.1~15순서</button>
+        <button class="c-speed" onclick="setPhase('BOMB')">15.폭탄돌리기</button>
+        <button class="c-mind" onclick="setPhase('NUNCHI')">16.황금눈치</button>
+        <button class="c-mind" onclick="setPhase('MINORITY')">17.소수결A/B</button>
+        <button class="c-mind" onclick="setPhase('LOTTO')">18.로또예측</button>
+        <button class="c-mind" onclick="setPhase('AVG80')">19.평균80%</button>
+        <button class="c-mind" onclick="setPhase('OX')">20.OX서바이벌</button>
+      </div>
+      <div class="nav-row">
+        <button class="c-event" onclick="setPhase('CONDITION')">21.조건빙고</button>
+        <button class="c-event" onclick="setPhase('TEAM_RANK')">22.테이블팀순위</button>
+        <button class="c-event" onclick="setPhase('LUCKY')">23.럭키드로우</button>
+        <button class="c-event" onclick="setPhase('VOTE')">24.실시간투표</button>
+        <button class="c-event" onclick="setPhase('DETECTIVE')">25.탐정추리</button>
+        <button class="c-rank" onclick="setPhase('LEADERBOARD')">📊 개인 중간순위</button>
+        <button class="c-rank" onclick="setPhase('FINAL')">🏆 최종 시상식</button>
+      </div>
+    </div>
+    <div class="board" id="screen"></div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    let qrData = '';
+    let joinUrl = '';
+
+    fetch('/qr').then(res => res.json()).then(data => {
+      qrData = data.qrDataUrl;
+      joinUrl = data.playerUrl;
+      socket.emit('host-join');
+    });
+
+    function setPhase(p) { socket.emit('change-phase', p); }
+    function nextQ() { socket.emit('next-question'); }
+    function calcChoice() { socket.emit('calculate-choice-result'); }
+    function awardOX(ans) { socket.emit('award-ox', ans); }
+    function drawLucky() { socket.emit('draw-lucky'); }
+
+    socket.on('state-update', (state) => {
+      const screen = document.getElementById('screen');
+      const players = Object.values(state.players);
+      const subCount = Object.keys(state.submissions).length;
+
+      if (state.phase === 'LOBBY') {
+        screen.innerHTML = `
+          <h1>📱 스마트폰 QR 스캔 입장 (현재 ${players.length}명 접속 중)</h1>
+          <img src="${qrData}" style="border-radius:12px;" />
+          <p style="color:#94a3b8;">${joinUrl}</p>
+          <div>${players.slice(-40).map(p => `<span class="badge">[${p.table}] ${p.name}</span>`).join('')}</div>
+        `;
+      } else if (state.phase === 'MEMORY') {
+        screen.innerHTML = `
+          <h1>🧠 숫자(1 → 5) 위치를 기억하세요!</h1>
+          <div class="mem-grid">${state.memoryGrid.map(n => `<div class="mem-cell">${n > 0 ? n : ''}</div>`).join('')}</div>
+          <p id="mem-guide" style="font-size:22px; color:#fbbf24;">3초 후 숫자가 가려집니다!</p>
+          <button onclick="nextQ()">다음 메모리 문제 ▶</button>
+        `;
+        setTimeout(() => {
+          document.querySelectorAll('.mem-cell').forEach(c => c.innerText = '?');
+          const g = document.getElementById('mem-guide');
+          if (g) g.innerText = '스마트폰에서 1~5 순서대로 터치하세요!';
+        }, 3000);
+      } else if (state.phase === 'CUSTOM_COLLECT') {
+        screen.innerHTML = `
+          <h1>🙋‍♂️ 선착순 12문제 출제 타임! (${state.customQuizzes.length} / 12문제)</h1>
+          ${state.customQuizzes.map((q, i) => `<div class="clue-box">✅ ${i+1}번 출제자: <b>${q.authorName}</b></div>`).join('')}
+          <br><button class="c-speed" onclick="setPhase('CUSTOM_SOLVE')">출제 마감 및 맞히기 시작 ▶</button>
+        `;
+      } else if (state.phase === 'CUSTOM_SOLVE') {
+        const q = state.customQuizzes[state.roundIdx];
+        if (!q) { screen.innerHTML = `<h2>출제된 문제가 없습니다!</h2>`; return; }
+        screen.innerHTML = `
+          <h1>❓ 참가자 출제 퀴즈 (${state.roundIdx + 1} / ${state.customQuizzes.length}) - 출제자: ${q.authorName}</h1>
+          <div class="big-text" style="font-size:42px;">"${q.question}"</div>
+          ${state.solvedBy ? `<h2 style="color:#34d399;">🎉 정답자: ${state.solvedBy} (정답: ${q.answer})</h2>` : `<p>가장 먼저 정답을 입력하세요!</p>`}
+          ${state.roundIdx + 1 < state.customQuizzes.length ? `<button onclick="nextQ()">다음 출제 문제 ▶</button>` : `<button class="c-rank" onclick="setPhase('LEADERBOARD')">순위표 보기 ▶</button>`}
+        `;
+      } else if (state.phase === 'WORDCHAIN') {
+        screen.innerHTML = `
+          <h1>⚡ 실시간 스피드 끝말잇기!</h1>
+          <div class="big-text" id="current-word">${state.currentWord}</div>
+          <p id="last-winner" style="font-size:22px; color:#34d399;"></p>
+        `;
+      } else if (state.phase === 'MATH') {
+        screen.innerHTML = `
+          <h1>✖️ 스피드 구구단 배틀!</h1>
+          <div class="big-text">${state.mathQ} = ?</div>
+          ${state.solvedBy ? `<h2 style="color:#34d399;">⚡ 1등: ${state.solvedBy}님!</h2>` : ''}
+          <button onclick="nextQ()">다음 구구단 문제 ▶</button>
+        `;
+      } else if (['NONSENSE', 'CHOSUNG', 'IDIOM', 'CAPITAL', 'SONG'].includes(state.phase)) {
+        screen.innerHTML = `
+          <h1>🎯 스피드 퀴즈 배틀! (문제 ${state.roundIdx + 1})</h1>
+          <div class="big-text" style="font-size:44px;">${state.currentData.q}</div>
+          ${state.solvedBy ? `<h2 style="color:#34d399;">🎉 1등 정답자: ${state.solvedBy}님! (+500점)</h2>` : `<p style="color:#fbbf24; font-size:22px;">가장 먼저 정답을 입력하세요!</p>`}
+          <button onclick="nextQ()">다음 문제 출제 ▶</button>
+        `;
+      } else if (state.phase === 'TWENTY') {
+        screen.innerHTML = `
+          <h1>🕵️‍♂️ 스무고개 키워드 추리!</h1>
+          ${(state.currentData.hints || []).map(h => `<div class="clue-box">${h}</div>`).join('')}
+          ${state.solvedBy ? `<h2 style="color:#34d399;">🎉 정답자: ${state.solvedBy}님!</h2>` : `<p style="color:#fbbf24;">힌트를 보고 정답 키워드를 입력하세요!</p>`}
+          <button onclick="nextQ()">다음 스무고개 ▶</button>
+        `;
+      } else if (state.phase === 'DETECTIVE') {
+        screen.innerHTML = `
+          <h1>🔍 명탐정 추리 미션!</h1>
+          <h2>${state.currentData.story}</h2>
+          ${(state.currentData.clues || []).map(c => `<div class="clue-box">${c}</div>`).join('')}
+          ${state.solvedBy ? `<h2 style="color:#34d399;">🎉 범인 검거 성공: ${state.solvedBy}님!</h2>` : `<p style="color:#fbbf24;">범인 번호(1~4)를 입력하세요!</p>`}
+        `;
+      } else if (state.phase === 'CLICKER') {
+        screen.innerHTML = `
+          <h1>🔥 광클 10초 연타 대결!</h1>
+          <p style="font-size:24px;">스마트폰 버튼을 10초 동안 최대한 많이 연타하세요!</p>
+          <h2 style="color:#38bdf8;">제출 완료 인원: ${subCount}명</h2>
+        `;
+      } else if (state.phase === 'STOPWATCH') {
+        screen.innerHTML = `
+          <h1>⏱️ 정확히 7.77초에 멈춰라!</h1>
+          <p style="font-size:24px;">눈대중으로 7.77초가 되었다고 생각할 때 정지 버튼을 누르세요!</p>
+          <h2 style="color:#38bdf8;">도전 완료: ${subCount}명</h2>
+        `;
+      } else if (state.phase === 'REFLEX') {
+        screen.innerHTML = `
+          <h1>🚩 청기백기 반사신경 배틀!</h1>
+          <div class="big-text">${state.currentData.text}</div>
+          ${state.solvedBy ? `<h2 style="color:#34d399;">⚡ 1등 성공: ${state.solvedBy}님!</h2>` : ''}
+          <button onclick="nextQ()">다음 지시 내리기 ▶</button>
+        `;
+      } else if (state.phase === 'NUM15') {
+        screen.innerHTML = `
+          <h1>🔢 1부터 15까지 순서대로 터치!</h1>
+          <p style="font-size:24px;">스마트폰 화면에 뒤섞인 1~15 숫자를 가장 빠르게 터치하세요!</p>
+        `;
+      } else if (state.phase === 'BOMB') {
+        screen.innerHTML = `
+          <h1>💣 폭탄 돌리기 서바이벌!</h1>
+          <div class="big-text">현재 폭탄: ${state.currentData.holderName}</div>
+          <p style="font-size:22px;">누적 패스 횟수: ${state.currentData.passes}회 (패스할 때마다 +50점!)</p>
+        `;
+      } else if (['NUNCHI', 'MINORITY', 'LOTTO', 'AVG80', 'OX', 'VOTE'].includes(state.phase)) {
+        const titles = {
+          NUNCHI: '👀 황금 눈치 게임 (1~10 중 가장 적은 인원이 고른 번호 승리!)',
+          MINORITY: '⚖️ 소수결 생존 게임 (A vs B 중 소수파 승리!)',
+          LOTTO: '🎱 행운의 로또 번호 예측 (1~20 중 하나 선택!)',
+          AVG80: '📉 평균의 80%를 맞혀라! (0~100 중 선택)',
+          OX: '⭕❌ 실시간 OX 서바이벌!',
+          VOTE: '🗳️ 실시간 인기투표 (1~4번 후보 선택!)'
+        };
+        screen.innerHTML = `
+          <h1>${titles[state.phase]}</h1>
+          <h2>현재 응답 완료: ${subCount} / ${players.length}명</h2>
+          <button class="c-rank" onclick="calcChoice()">집계 결과 공개 및 점수 정산 ▶</button>
+          ${state.phase === 'OX' ? `<button class="c-speed" onclick="awardOX('O')">정답 O 지급</button> <button class="c-event" onclick="awardOX('X')">정답 X 지급</button>` : ''}
+          ${state.revealResult ? `<div class="big-text" style="font-size:32px; color:#34d399;">${state.revealResult}</div>` : ''}
+        `;
+      } else if (state.phase === 'CONDITION') {
+        screen.innerHTML = `
+          <h1>🎁 현장 조건 빙고!</h1>
+          <div class="big-text" style="font-size:42px;">"${state.currentData.text}"</div>
+          <p style="font-size:22px;">해당되시는 분은 스마트폰에서 [저요! 인증하기]를 누르세요! (+300점)</p>
+          <button onclick="nextQ()">다음 조건 발표 ▶</button>
+        `;
+      } else if (state.phase === 'TEAM_RANK') {
+        const tableScores = {};
+        players.forEach(p => {
+          if (!tableScores[p.table]) tableScores[p.table] = { sum: 0, count: 0 };
+          tableScores[p.table].sum += p.score;
+          tableScores[p.table].count += 1;
+        });
+        const sortedTables = Object.entries(tableScores)
+          .map(([t, d]) => ({ table: t, avg: Math.round(d.sum / d.count), count: d.count }))
+          .sort((a, b) => b.avg - a.avg);
+        screen.innerHTML = `
+          <h1>🍽️ 테이블(팀)별 평균 점수 순위</h1>
+          ${sortedTables.map((t, i) => `
+            <div class="rank-row">
+              <span>${i+1}위. ${t.table} 테이블 (${t.count}명)</span>
+              <span style="color:#38bdf8;">평균 ${t.avg.toLocaleString()}점</span>
+            </div>
+          `).join('')}
+        `;
+      } else if (state.phase === 'LUCKY') {
+        screen.innerHTML = `
+          <h1>🎰 200인 실시간 럭키드로우 (행운권 추첨)</h1>
+          <button class="c-event" style="font-size:24px; padding:18px 36px;" onclick="drawLucky()">🎲 행운의 주인공 추첨하기!</button>
+          ${state.luckyWinner ? `<div class="big-text">🎉 축하합니다! ${state.luckyWinner} 🎉</div>` : ''}
+        `;
+      } else if (state.phase === 'LEADERBOARD' || state.phase === 'FINAL') {
+        const sorted = [...players].sort((a, b) => b.score - a.score).slice(0, 10);
+        screen.innerHTML = `
+          <h1>${state.phase === 'FINAL' ? '🏆 최종 TOP 10 시상식 🏆' : '📊 실시간 TOP 10 중간순위표'}</h1>
+          ${sorted.map((p, i) => `
+            <div class="rank-row">
+              <span>${i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1)+'위.'} [${p.table}] ${p.name}</span>
+              <span style="color:#fbbf24;">${p.score.toLocaleString()}점</span>
+            </div>
+          `).join('')}
+        `;
+      }
+    });
+
+    socket.on('word-updated', ({ currentWord, playerName }) => {
+      const w = document.getElementById('current-word');
+      const l = document.getElementById('last-winner');
+      if (w) w.innerText = currentWord;
+      if (l) l.innerText = `🔥 방금 '${playerName}'님이 성공했습니다!`;
+    });
+  </script>
+</body>
+</html>

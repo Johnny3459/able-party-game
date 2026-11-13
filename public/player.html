@@ -1,0 +1,149 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>파티게임 참가자</title>
+  <style>
+    body { font-family: 'Pretendard', sans-serif; background: #0f172a; color: white; text-align: center; padding: 18px; margin: 0; }
+    input { width: 85%; padding: 14px; font-size: 18px; border-radius: 10px; border: none; margin-bottom: 12px; text-align: center; }
+    button { width: 90%; padding: 15px; font-size: 18px; font-weight: bold; border-radius: 10px; border: none; background: #10b981; color: white; cursor: pointer; margin: 5px 0; }
+    .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; max-width: 320px; margin: 15px auto; }
+    .grid5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; max-width: 340px; margin: 15px auto; }
+    .cell-btn { height: 85px; background: #334155; border-radius: 10px; color: white; font-size: 22px; }
+    .cell-btn.active { background: #3b82f6; }
+    .num-btn { height: 55px; background: #334155; border-radius: 8px; color: white; font-size: 18px; }
+    .msg { margin-top: 16px; font-size: 18px; font-weight: bold; color: #fbbf24; min-height: 28px; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div class="msg" id="feedback"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    let playerId = localStorage.getItem('party_player_id');
+    if (!playerId) {
+      playerId = 'p_' + Math.random().toString(36).substr(2, 9);
+      localStorage.setItem('party_player_id', playerId);
+    }
+    let playerName = localStorage.getItem('party_player_name') || '';
+    let playerTable = localStorage.getItem('party_player_table') || '';
+    let clickedIndices = [];
+    let startTime = 0;
+
+    function joinGame() {
+      const n = document.getElementById('nickname').value.trim();
+      const t = document.getElementById('tablename').value.trim() || '자유석';
+      if (!n) return alert('이름(닉네임)을 입력하세요!');
+      playerName = n;
+      playerTable = t;
+      localStorage.setItem('party_player_name', n);
+      localStorage.setItem('party_player_table', t);
+      socket.emit('player-join', { playerId, name: n, table: t });
+    }
+
+    if (playerName) {
+      socket.emit('player-join', { playerId, name: playerName, table: playerTable });
+    } else {
+      document.getElementById('app').innerHTML = `
+        <h2>🎉 파티게임 입장</h2>
+        <input id="tablename" placeholder="테이블 번호 또는 팀명 (예: 3번)" maxlength="10" />
+        <input id="nickname" placeholder="이름 또는 닉네임 (예: 홍길동)" maxlength="10" />
+        <button onclick="joinGame()">게임 참가하기</button>
+      `;
+    }
+
+    socket.on('phase-change', (state) => {
+      if (!playerName) return;
+      document.getElementById('feedback').innerText = '';
+      const app = document.getElementById('app');
+      const p = state.phase;
+
+      if (p === 'LOBBY') {
+        app.innerHTML = `<h2>✅ [${playerTable}] ${playerName}님 입장 완료!</h2><p>앞의 대형 화면을 주목해 주세요.</p>`;
+      } else if (p === 'MEMORY') {
+        clickedIndices = [];
+        startTime = Date.now();
+        app.innerHTML = `<h3>1→5 순서대로 터치!</h3><div class="grid3">${Array.from({length:9}, (_,i)=>`<button class="cell-btn" id="c-${i}" onclick="tapMem(${i})">?</button>`).join('')}</div>`;
+      } else if (p === 'CUSTOM_COLLECT') {
+        app.innerHTML = `<h3>🙋‍♂️ 선착순 12문제 출제</h3><input id="cq" placeholder="문제 입력"/><input id="ca" placeholder="정답 입력"/><button onclick="sendCQ()">제출 (+200점)</button>`;
+      } else if (p === 'CUSTOM_SOLVE') {
+        app.innerHTML = `<h3>❓ 출제 퀴즈 맞히기</h3><input id="cg" placeholder="정답 입력"/><button onclick="sendCA()">정답 제출</button>`;
+      } else if (p === 'WORDCHAIN') {
+        app.innerHTML = `<h3>제시어: <span id="p-word" style="color:#fbbf24;">${state.currentWord}</span></h3><input id="wi" placeholder="이어질 단어"/><button onclick="sendWord()">전송</button>`;
+      } else if (p === 'MATH') {
+        app.innerHTML = `<h3>구구단: ${state.mathQ} = ?</h3><input id="mi" type="number" inputmode="numeric" placeholder="정답 숫자"/><button onclick="sendMath()">제출</button>`;
+      } else if (['NONSENSE','CHOSUNG','IDIOM','CAPITAL','SONG','TWENTY','DETECTIVE'].includes(p)) {
+        app.innerHTML = `<h3>🎯 전광판 문제를 보고 정답 입력!</h3><input id="ti" placeholder="정답 입력"/><button onclick="sendText()">정답 제출!</button>`;
+      } else if (p === 'CLICKER') {
+        let count = 0;
+        let active = true;
+        app.innerHTML = `<h3>🔥 10초 동안 미친듯이 연타하세요!</h3><button id="clk-btn" style="height:180px; font-size:32px; background:#ef4444;">터치! (0)</button>`;
+        const btn = document.getElementById('clk-btn');
+        btn.onclick = () => { if (active) { count++; btn.innerText = `터치! (${count})`; } };
+        setTimeout(() => { active = false; btn.disabled = true; socket.emit('submit-clicker', { playerId, clicks: count }); }, 10000);
+      } else if (p === 'STOPWATCH') {
+        const t0 = Date.now();
+        app.innerHTML = `<h3>⏱️ 7.77초에 멈추세요!</h3><button id="sw-btn" style="height:160px; font-size:28px; background:#f59e0b; color:#000;">지금 정지!</button>`;
+        document.getElementById('sw-btn').onclick = function() {
+          this.disabled = true;
+          socket.emit('submit-stopwatch', { playerId, timeSec: (Date.now() - t0) / 1000 });
+        };
+      } else if (p === 'REFLEX') {
+        app.innerHTML = `<h3>🚩 지시대로 누르세요!</h3>
+          <button style="height:100px; background:#2563eb;" onclick="socket.emit('submit-reflex',{playerId,action:'BLUE_UP'})">🔵 청기 올려!</button>
+          <button style="height:100px; background:#e2e8f0; color:#000;" onclick="socket.emit('submit-reflex',{playerId,action:'WHITE_UP'})">⚪ 백기 올려!</button>`;
+      } else if (p === 'NUM15') {
+        let nextNum = 1;
+        const t0 = Date.now();
+        const nums = Array.from({length:15}, (_,i)=>i+1).sort(()=>Math.random()-0.5);
+        app.innerHTML = `<h3>🔢 1 → 15 순서대로 터치!</h3><div class="grid5">${nums.map(n=>`<button class="num-btn" id="n-${n}" onclick="tap15(${n})">${n}</button>`).join('')}</div>`;
+        window.tap15 = (n) => {
+          if (n === nextNum) {
+            document.getElementById(`n-${n}`).style.visibility = 'hidden';
+            nextNum++;
+            if (nextNum > 15) socket.emit('submit-num15', { playerId, timeSec: (Date.now() - t0) / 1000 });
+          }
+        };
+      } else if (p === 'BOMB') {
+        app.innerHTML = `<h3>💣 폭탄을 남에게 넘기세요!</h3><button style="height:160px; font-size:28px; background:#dc2626;" onclick="socket.emit('pass-bomb',{playerId})">💣 폭탄 넘기기! (+50점)</button>`;
+      } else if (p === 'NUNCHI') {
+        app.innerHTML = `<h3>👀 눈치 게임 (1~10 선택)</h3><div class="grid5">${Array.from({length:10},(_,i)=>`<button class="num-btn" onclick="sendChoice(${i+1})">${i+1}</button>`).join('')}</div>`;
+      } else if (p === 'MINORITY') {
+        app.innerHTML = `<h3>⚖️ 소수파가 이깁니다!</h3><button style="height:100px; background:#2563eb;" onclick="sendChoice('A')">🅰️ A 선택</button><button style="height:100px; background:#db2777;" onclick="sendChoice('B')">🅱️ B 선택</button>`;
+      } else if (p === 'LOTTO') {
+        app.innerHTML = `<h3>🎱 행운의 번호 (1~20)</h3><div class="grid5">${Array.from({length:20},(_,i)=>`<button class="num-btn" onclick="sendChoice(${i+1})">${i+1}</button>`).join('')}</div>`;
+      } else if (p === 'AVG80') {
+        app.innerHTML = `<h3>📉 0~100 사이 숫자 입력</h3><input id="avg-i" type="number" min="0" max="100" placeholder="0 ~ 100"/><button onclick="sendChoice(document.getElementById('avg-i').value)">제출</button>`;
+      } else if (p === 'OX') {
+        app.innerHTML = `<h3>⭕❌ 선택하세요!</h3><button style="height:110px; background:#2563eb; font-size:36px;" onclick="sendChoice('O')">⭕ O</button><button style="height:110px; background:#dc2626; font-size:36px;" onclick="sendChoice('X')">❌ X</button>`;
+      } else if (p === 'CONDITION') {
+        app.innerHTML = `<h3>🎁 전광판 조건에 해당하나요?</h3><button style="height:130px; font-size:26px;" onclick="sendChoice('YES')">🙋‍♂️ 저요! 해당됩니다 (+300점)</button>`;
+      } else if (p === 'VOTE') {
+        app.innerHTML = `<h3>🗳️ 후보 번호 투표</h3><div class="grid3" style="grid-template-columns:1fr 1fr;">${['1번','2번','3번','4번'].map(v=>`<button class="cell-btn" onclick="sendChoice('${v}')">${v}</button>`).join('')}</div>`;
+      } else {
+        app.innerHTML = `<h2>📊 전광판을 주목해 주세요!</h2>`;
+      }
+    });
+
+    function tapMem(i) {
+      if (clickedIndices.length >= 5 || clickedIndices.includes(i)) return;
+      clickedIndices.push(i);
+      const b = document.getElementById(`c-${i}`);
+      b.classList.add('active'); b.innerText = clickedIndices.length;
+      if (clickedIndices.length === 5) socket.emit('submit-memory', { playerId, clickedIndices, timeTakenMs: Date.now() - startTime });
+    }
+    function sendCQ() { socket.emit('submit-custom-quiz', { playerId, question: document.getElementById('cq').value, answer: document.getElementById('ca').value }); }
+    function sendCA() { const el = document.getElementById('cg'); socket.emit('answer-custom-quiz', { playerId, guess: el.value }); el.value = ''; }
+    function sendWord() { const el = document.getElementById('wi'); socket.emit('submit-word', { playerId, word: el.value }); el.value = ''; }
+    function sendMath() { const el = document.getElementById('mi'); socket.emit('submit-math', { playerId, answer: el.value }); el.value = ''; }
+    function sendText() { const el = document.getElementById('ti'); socket.emit('submit-text-quiz', { playerId, guess: el.value }); el.value = ''; }
+    function sendChoice(v) { if (v !== '') socket.emit('submit-choice', { playerId, value: v }); }
+
+    socket.on('word-updated', ({ currentWord }) => { const el = document.getElementById('p-word'); if (el) el.innerText = currentWord; });
+    socket.on('action-result', (msg) => { document.getElementById('feedback').innerText = msg; });
+  </script>
+</body>
+</html>
